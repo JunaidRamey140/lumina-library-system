@@ -1,0 +1,6 @@
+{
+  "name": "Lumina Library System",
+  "description": "A comprehensive role-based library management system for managing books, members, issuances, and library analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

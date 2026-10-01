@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isRole(role) {
+      return isSignedIn() && getUserData().role == role;
+    }
+    
+    function isAdmin() {
+      return isRole('admin');
+    }
+    
+    function isLibrarian() {
+      return isRole('librarian') || isAdmin();
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isOwner(userId) || isLibrarian());
+      // New profiles start as 'member'; only the bootstrap admin account may create
+      // itself as 'admin' (keep this email in sync with src/contexts/AuthContext.tsx).
+      allow create: if isSignedIn() && isOwner(userId) && (
+        request.resource.data.role == 'member' ||
+        (request.resource.data.role == 'admin' &&
+          request.auth.token.email_verified == true &&
+          request.auth.token.email.lower() == 'makilivelink@gmail.com')
+      );
+      allow update: if isSignedIn() && (
+        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])) ||
+        isAdmin()
+      );
+    }
+
+    // --- Books ---
+    match /books/{bookId} {
+      allow read: if isSignedIn();
+      allow write: if isLibrarian();
+    }
+
+    // --- Transactions ---
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isLibrarian());
+      allow create: if isSignedIn() && (request.resource.data.userId == request.auth.uid || isLibrarian());
+      allow update: if isLibrarian();
+    }
+
+    // --- Notifications ---
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if isLibrarian();
+    }
+  }
+}
